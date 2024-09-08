@@ -1,5 +1,4 @@
 import time
-
 import ctypes
 import cv2
 import numpy as np
@@ -48,13 +47,13 @@ class PcControllerBase(ControllerBase):
         if self.sct is not None:  # 新一次app前 先关闭上一个
             try:
                 self.sct.close()
-            except Exception:
-                pass
+            except Exception as e:
+                log.error('关闭上一个截图工具失败: %s', str(e))
         try:
             import mss
             self.sct = mss.mss()
-        except Exception:
-            pass
+        except Exception as e:
+            log.error('初始化截图工具失败: %s', str(e))
         self.active_window()
 
         return True
@@ -77,21 +76,30 @@ class PcControllerBase(ControllerBase):
         self.game_win.active()
 
     def enable_xbox(self):
-        if pc_button_utils.is_vgamepad_installed():
-            if self.xbox_controller is None:
-                self.xbox_controller = XboxButtonController()
-            self.btn_controller = self.xbox_controller
-            self.btn_controller.reset()
+        try:
+            if pc_button_utils.is_vgamepad_installed():
+                if self.xbox_controller is None:
+                    self.xbox_controller = XboxButtonController()
+                self.btn_controller = self.xbox_controller
+                self.btn_controller.reset()
+        except Exception as e:
+            log.error('启用 Xbox 控制器失败: %s', str(e))
 
     def enable_ds4(self):
-        if pc_button_utils.is_vgamepad_installed():
-            if self.ds4_controller is None:
-                self.ds4_controller = Ds4ButtonController()
-            self.btn_controller = self.ds4_controller
-            self.btn_controller.reset()
+        try:
+            if pc_button_utils.is_vgamepad_installed():
+                if self.ds4_controller is None:
+                    self.ds4_controller = Ds4ButtonController()
+                self.btn_controller = self.ds4_controller
+                self.btn_controller.reset()
+        except Exception as e:
+            log.error('启用 DS4 控制器失败: %s', str(e))
 
     def enable_keyboard(self):
-        self.btn_controller = self.keyboard_controller
+        try:
+            self.btn_controller = self.keyboard_controller
+        except Exception as e:
+            log.error('启用键盘控制器失败: %s', str(e))
 
     @property
     def is_game_window_ready(self) -> bool:
@@ -109,56 +117,65 @@ class PcControllerBase(ControllerBase):
         :param pc_alt: 只在PC端有用 使用ALT键进行点击
         :return: 不在窗口区域时不点击 返回False
         """
-        click_pos: Point
-        if pos is not None:
-            click_pos: Point = self.game_win.game2win_pos(pos)
-            if click_pos is None:
-                log.error('点击非游戏窗口区域 (%s)', pos)
-                return False
-        else:
-            click_pos = get_current_mouse_pos()
+        try:
+            click_pos: Point
+            if pos is not None:
+                click_pos: Point = self.game_win.game2win_pos(pos)
+                if click_pos is None:
+                    log.error('点击非游戏窗口区域 (%s)', pos)
+                    return False
+            else:
+                click_pos = get_current_mouse_pos()
 
-        if pc_alt:
-            self.keyboard_controller.keyboard.press(keyboard.Key.alt)
-            time.sleep(0.2)
-        win_click(click_pos, press_time=press_time)
-        if pc_alt:
-            self.keyboard_controller.keyboard.release(keyboard.Key.alt)
-        return True
+            if pc_alt:
+                self.keyboard_controller.keyboard.press(keyboard.Key.alt)
+                time.sleep(0.2)
+            win_click(click_pos, press_time=press_time)
+            if pc_alt:
+                self.keyboard_controller.keyboard.release(keyboard.Key.alt)
+            return True
+        except Exception as e:
+            log.error('点击失败: %s', str(e))
+            return False
 
     def get_screenshot(self, independent: bool = False) -> MatLike:
         """
         截图 如果分辨率和默认不一样则进行缩放
         :return: 截图
         """
-        rect: Rect = self.game_win.win_rect
+        try:
+            rect: Rect = self.game_win.win_rect
 
-        left = rect.x1
-        top = rect.y1
-        width = rect.width
-        height = rect.height
+            left = rect.x1
+            top = rect.y1
+            width = rect.width
+            height = rect.height
 
-        if self.sct is not None:
-            monitor = {"top": top, "left": left, "width": width, "height": height}
-            if independent:
-                try:
-                    import mss
-                    with mss.mss() as sct:
-                        screenshot = cv2.cvtColor(np.array(sct.grab(monitor)), cv2.COLOR_BGRA2RGB)
-                except Exception:
-                    pass
+            if self.sct is not None:
+                monitor = {"top": top, "left": left, "width": width, "height": height}
+                if independent:
+                    try:
+                        import mss
+                        with mss.mss() as sct:
+                            screenshot = cv2.cvtColor(np.array(sct.grab(monitor)), cv2.COLOR_BGRA2RGB)
+                    except Exception as e:
+                        log.error('独立截图失败: %s', str(e))
+                        screenshot = np.zeros((height, width, 3), dtype=np.uint8)
+                else:
+                    screenshot = cv2.cvtColor(np.array(self.sct.grab(monitor)), cv2.COLOR_BGRA2RGB)
             else:
-                screenshot = cv2.cvtColor(np.array(self.sct.grab(monitor)), cv2.COLOR_BGRA2RGB)
-        else:
-            img: Image = pyautogui.screenshot(region=(left, top, width, height))
-            screenshot = np.array(img)
+                img: Image = pyautogui.screenshot(region=(left, top, width, height))
+                screenshot = np.array(img)
 
-        if self.game_win.is_win_scale:
-            result = cv2.resize(screenshot, (self.standard_width, self.standard_height))
-        else:
-            result = screenshot
+            if self.game_win.is_win_scale:
+                result = cv2.resize(screenshot, (self.standard_width, self.standard_height))
+            else:
+                result = screenshot
 
-        return result
+            return result
+        except Exception as e:
+            log.error('截图失败: %s', str(e))
+            return np.zeros((self.standard_height, self.standard_width, 3), dtype=np.uint8)
 
     def scroll(self, down: int, pos: Point = None):
         """
@@ -167,10 +184,13 @@ class PcControllerBase(ControllerBase):
         :param pos: 滚动位置 默认分辨率下的游戏窗口里的坐标
         :return:
         """
-        if pos is None:
-            pos = get_current_mouse_pos()
-        win_pos = self.game_win.game2win_pos(pos)
-        win_scroll(down, win_pos)
+        try:
+            if pos is None:
+                pos = get_current_mouse_pos()
+            win_pos = self.game_win.game2win_pos(pos)
+            win_scroll(down, win_pos)
+        except Exception as e:
+            log.error('滚动失败: %s', str(e))
 
     def drag_to(self, end: Point, start: Point = None, duration: float = 0.5):
         """
@@ -180,14 +200,17 @@ class PcControllerBase(ControllerBase):
         :param duration: 拖拽持续时间
         :return:
         """
-        from_pos: Point
-        if start is None:
-            from_pos = get_current_mouse_pos()
-        else:
-            from_pos = self.game_win.game2win_pos(start)
+        try:
+            from_pos: Point
+            if start is None:
+                from_pos = get_current_mouse_pos()
+            else:
+                from_pos = self.game_win.game2win_pos(start)
 
-        to_pos = self.game_win.game2win_pos(end)
-        drag_mouse(from_pos, to_pos, duration=duration)
+            to_pos = self.game_win.game2win_pos(end)
+            drag_mouse(from_pos, to_pos, duration=duration)
+        except Exception as e:
+            log.error('拖拽失败: %s', str(e))
 
     def close_game(self):
         """
@@ -197,8 +220,8 @@ class PcControllerBase(ControllerBase):
         try:
             self.game_win.win.close()
             log.info('关闭游戏成功')
-        except:
-            log.error('关闭游戏失败', exc_info=True)
+        except Exception as e:
+            log.error('关闭游戏失败: %s', str(e))
 
     def input_str(self, to_input: str, interval: float = 0.1):
         """
@@ -206,7 +229,10 @@ class PcControllerBase(ControllerBase):
         :param to_input: 文本
         :return:
         """
-        self.keyboard_controller.keyboard.type(to_input)
+        try:
+            self.keyboard_controller.keyboard.type(to_input)
+        except Exception as e:
+            log.error('输入文本失败: %s', str(e))
 
 
 def win_click(pos: Point = None, press_time: float = 0, primary: bool = True):
@@ -217,16 +243,19 @@ def win_click(pos: Point = None, press_time: float = 0, primary: bool = True):
     :param primary: 是否点击鼠标主要按键（通常是左键）
     :return:
     """
-    btn = pyautogui.PRIMARY if primary else pyautogui.SECONDARY
-    if pos is None:
-        pos = get_current_mouse_pos()
-    if press_time > 0:
-        pyautogui.moveTo(pos.x, pos.y)
-        pyautogui.mouseDown(button=btn)
-        time.sleep(press_time)
-        pyautogui.mouseUp(button=btn)
-    else:
-        pyautogui.click(pos.x, pos.y, button=btn)
+    try:
+        btn = pyautogui.PRIMARY if primary else pyautogui.SECONDARY
+        if pos is None:
+            pos = get_current_mouse_pos()
+        if press_time > 0:
+            pyautogui.moveTo(pos.x, pos.y)
+            pyautogui.mouseDown(button=btn)
+            time.sleep(press_time)
+            pyautogui.mouseUp(button=btn)
+        else:
+            pyautogui.click(pos.x, pos.y, button=btn)
+    except Exception as e:
+        log.error('鼠标点击失败: %s', str(e))
 
 
 def win_scroll(clicks: int, pos: Point = None):
@@ -236,10 +265,13 @@ def win_scroll(clicks: int, pos: Point = None):
     :param pos: 滚动位置 不传入时为鼠标当前位置
     :return:
     """
-    if pos is not None:
-        pyautogui.moveTo(pos.x, pos.y)
-    d = 2000 if get_mouse_sensitivity() <= 10 else 1000
-    pyautogui.scroll(-d * clicks, pos.x, pos.y)
+    try:
+        if pos is not None:
+            pyautogui.moveTo(pos.x, pos.y)
+        d = 2000 if get_mouse_sensitivity() <= 10 else 1000
+        pyautogui.scroll(-d * clicks, pos.x, pos.y)
+    except Exception as e:
+        log.error('鼠标滚动失败: %s', str(e))
 
 
 @lru_cache
@@ -248,10 +280,14 @@ def get_mouse_sensitivity():
     获取鼠标灵敏度
     :return:
     """
-    user32 = ctypes.windll.user32
-    speed = ctypes.c_int()
-    user32.SystemParametersInfoA(0x0070, 0, ctypes.byref(speed), 0)
-    return speed.value
+    try:
+        user32 = ctypes.windll.user32
+        speed = ctypes.c_int()
+        user32.SystemParametersInfoA(0x0070, 0, ctypes.byref(speed), 0)
+        return speed.value
+    except Exception as e:
+        log.error('获取鼠标灵敏度失败: %s', str(e))
+        return 10  # 返回一个默认值以防止程序崩溃
 
 
 def drag_mouse(start: Point, end: Point, duration: float = 0.5):
@@ -262,8 +298,11 @@ def drag_mouse(start: Point, end: Point, duration: float = 0.5):
     :param duration: 拖动鼠标到目标位置，持续秒数
     :return:
     """
-    pyautogui.moveTo(start.x, start.y)  # 将鼠标移动到起始位置
-    pyautogui.dragTo(end.x, end.y, duration=duration)
+    try:
+        pyautogui.moveTo(start.x, start.y)  # 将鼠标移动到起始位置
+        pyautogui.dragTo(end.x, end.y, duration=duration)
+    except Exception as e:
+        log.error('拖动鼠标失败: %s', str(e))
 
 
 def get_current_mouse_pos() -> Point:
@@ -271,5 +310,9 @@ def get_current_mouse_pos() -> Point:
     获取鼠标当前坐标
     :return:
     """
-    pos = pyautogui.position()
-    return Point(pos.x, pos.y)
+    try:
+        pos = pyautogui.position()
+        return Point(pos.x, pos.y)
+    except Exception as e:
+        log.error('获取鼠标位置失败: %s', str(e))
+        return Point(0, 0)  # 返回一个默认值以防止程序崩溃

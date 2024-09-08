@@ -1,13 +1,13 @@
 import ctypes
 from ctypes.wintypes import RECT
-
 import pyautogui
 from pygetwindow import Win32Window
-
 from one_dragon.base.geometry.point import Point
 from one_dragon.base.geometry.rectangle import Rect
 from one_dragon.utils.log_utils import log
-
+import win32api  # 用于获取屏幕分辨率
+import win32con
+import win32gui
 
 class PcGameWindow:
 
@@ -26,7 +26,7 @@ class PcGameWindow:
 
     def init_win(self) -> None:
         """
-        初始化窗口
+        初始化窗口，若未检测到窗口则给出提示信息
         :return:
         """
         self.win = None
@@ -37,6 +37,37 @@ class PcGameWindow:
                 if win.title == self.win_title:
                     self.win = win
                     self.hWnd = win._hWnd
+        else:
+            log.warning(f"未检测到名为 '{self.win_title}' 的游戏窗口，请确认游戏已启动。")
+
+    def check_resolution_and_fullscreen(self) -> bool:
+        """
+        检查当前游戏窗口是否是16:9的分辨率，并处理全屏模式
+        """
+        screen_resolutions = [(1920, 1080), (2560, 1440), (3840, 2160)]
+        game_rect = self.win_rect
+
+        if game_rect is None:  # 如果 game_rect 是 None，表示窗口未初始化成功
+            log.error("无法获取游戏窗口信息，窗口未正确初始化。")
+            return False
+        
+        # 检查窗口是否是16:9的分辨率
+        current_res = (game_rect.width, game_rect.height)
+        if current_res not in screen_resolutions:
+            log.warning(f"警告: 当前游戏分辨率 {current_res} 可能有问题，建议使用16:9分辨率。")
+            return False
+
+        # 检查是否是全屏，并且显示器的分辨率是否也是16:9
+        if self.win.isMaximized:
+            screen_width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+            screen_height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+            if (screen_width, screen_height) not in screen_resolutions:
+                log.warning(f"警告: 当前显示器分辨率 {(screen_width, screen_height)} 不是16:9，全屏模式可能无法正确显示。")
+                return False
+
+        log.info(f"当前游戏分辨率为 {current_res}，符合16:9要求。")
+        return True
+
     @property
     def is_win_valid(self) -> bool:
         """
@@ -46,59 +77,14 @@ class PcGameWindow:
         return self.win is not None and self.hWnd is not None and ctypes.windll.user32.IsWindow(self.hWnd) != 0
 
     @property
-    def is_win_active(self) -> bool:
-        """
-        是否当前激活的窗口
-        :return:
-        """
-        return self.win.isActive
-
-    @property
-    def is_win_scale(self) -> bool:
-        """
-        当前窗口是否缩放
-        :return:
-        """
-        if self.win is None:
-            return False
-        win_rect = self.win_rect
-
-        return not (win_rect.width == self.standard_width and win_rect.height == self.standard_height)
-
-    def active(self) -> bool:
-        """
-        显示并激活当前窗口
-        :return:
-        """
-        if self.win is None:
-            return False
-        if self.is_win_active:
-            return True
-        try:
-            try:
-                self.win.restore()
-                self.win.activate()
-                return True
-            except Exception:
-                # 比较神奇的一个bug 直接activate有可能失败
-                # https://github.com/asweigart/PyGetWindow/issues/16#issuecomment-1110207862
-                self.win.minimize()
-                self.win.restore()
-                self.win.activate()
-                return True
-        except Exception:
-            log.error('切换到游戏窗口失败', exc_info=True)
-            return False
-
-    @property
     def win_rect(self) -> Rect:
         """
         获取游戏窗口在桌面上面的位置
         Win32Window 里是整个window的信息 参考源码获取里面client部分的
-        :return: 游戏窗口信息
+        :return: 游戏窗口信息，如果窗口未初始化则返回 None
         """
         if self.hWnd is None:
-            return None
+            return None  # 如果 hWnd 是 None，返回 None
         client_rect = RECT()
         ctypes.windll.user32.GetClientRect(self.hWnd, ctypes.byref(client_rect))
         left_top_pos = ctypes.wintypes.POINT(client_rect.left, client_rect.top)

@@ -61,9 +61,19 @@ class PcControllerBase(ControllerBase):
 
     def active_window(self) -> None:
         """
-        前置窗口
+        前置窗口并检查分辨率和全屏状态，未检测到窗口时给出提示
         """
         self.game_win.init_win()
+
+        # 检查是否检测到窗口
+        if not self.game_win.is_win_valid:
+            log.warning("未检测到游戏窗口，请确认游戏已启动。")
+            return
+
+        # 检查游戏窗口分辨率和全屏状态
+        if not self.game_win.check_resolution_and_fullscreen():
+            log.warning("游戏窗口的分辨率或全屏设置有潜在问题。")
+        
         self.game_win.active()
 
     def enable_xbox(self):

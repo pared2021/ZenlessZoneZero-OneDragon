@@ -61,7 +61,7 @@ class EnterHddMission(ZOperation):
         return self.round_retry(wait=1)
 
     @node_from(from_name='选择委托')
-    @operation_node(name='选择副本')
+    @operation_node(name='选择副本', node_max_retry_times=10)  # 有些副本比较多 多允许滑动几次找找
     def choose_mission(self) -> OperationRoundResult:
         screen = self.screenshot()
         area = self.ctx.screen_loader.get_area('HDD', '副本区域')
@@ -71,7 +71,7 @@ class EnterHddMission(ZOperation):
 
         # 找不到时候 往下滑
         drag_from = area.center
-        drag_to = drag_from + Point(0, -100)
+        drag_to = drag_from + Point(0, -200)
         self.ctx.controller.drag_to(start=drag_from, end=drag_to)
 
         return self.round_retry(wait=1)
@@ -88,4 +88,17 @@ class EnterHddMission(ZOperation):
     def click_deploy(self) -> OperationRoundResult:
         screen = self.screenshot()
         return self.round_by_find_and_click_area(screen, 'HDD', '出战',
-                                                 success_wait=2, retry_wait=1)
+                                                 success_wait=1, retry_wait=1)
+
+    @node_from(from_name='出战')
+    @operation_node(name='识别低等级')
+    def check_level(self) -> OperationRoundResult:
+        screen = self.screenshot()
+        return self.round_by_find_and_click_area(screen, 'HDD', '确定并出战',
+                                                 retry_wait=1)
+
+    @node_from(from_name='识别低等级')
+    @node_from(from_name='识别低等级', success=False)
+    @operation_node(name='进入成功')
+    def finish(self) -> OperationRoundResult:
+        return self.round_success()

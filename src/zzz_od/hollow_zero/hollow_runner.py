@@ -7,7 +7,7 @@ from one_dragon.base.operation.operation_edge import node_from
 from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
 from one_dragon.utils.i18_utils import gt
-from zzz_od.application.hollow_zero.hollow_zero_config import HollowZeroExtraTask
+from zzz_od.application.hollow_zero.hollow_zero_config import HollowZeroExtraTask, HollowZeroExtraExitEnum
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.hollow_zero.event import hollow_event_utils
 from zzz_od.hollow_zero.event.bamboo_merchant import BambooMerchant
@@ -109,8 +109,7 @@ class HollowRunner(ZOperation):
                 return self.round_retry()
 
         if event_name == HollowZeroSpecialEvent.MISSION_COMPLETE.value.event_name:
-            return self.round_by_find_and_click_area(screen, '零号空洞-事件', '通关-完成',
-                                                     success_wait=5, retry_wait=1)
+            return self.round_success(status='通关-完成')
 
         return self.round_retry('当前事件未有对应指令', wait=1)
 
@@ -131,7 +130,7 @@ class HollowRunner(ZOperation):
 
         if pathfinding_success:
             self.ctx.hollow.check_info_before_move(screen, current_map)
-            self._try_click_speed_up(screen)
+            # self._try_click_speed_up(screen)  # 可以在游戏内设置继承上一次
             extra_finished = self._check_extra_task_finished(screen, current_map)
             if extra_finished:
                 return self.round_success(HollowRunner.STATUS_LEAVE)
@@ -163,31 +162,42 @@ class HollowRunner(ZOperation):
         """
         level_info = self.ctx.hollow.level_info
         # 完成指定次数后才会触发刷业绩的选项
-        if not self.ctx.hollow_zero_record.is_finished_by_times():
+        if not self.ctx.hollow_zero_record.is_finished_by_weekly_times():
             return False
 
         if self.ctx.hollow_zero_config.extra_task == HollowZeroExtraTask.NONE.value.value:
             return False
 
-        if self.ctx.hollow_zero_config.extra_task == HollowZeroExtraTask.LEVEL_2.value.value:
+        # 判断是否到达层数退出
+        extra_exit_by_level: bool = False
+        if self.ctx.hollow_zero_config.extra_exit == HollowZeroExtraExitEnum.LEVEL_2_EVA.value.value:
             if level_info.level > 2 or (level_info.level == 2 and level_info.phase > 1):  # 已经过了指定的楼层
-                return True
+                extra_exit_by_level = True
             if level_info.level == 2 and level_info.phase == 1:
                 if self.ctx.hollow.had_been_entry('业绩考察点') and not current_map.contains_entry('业绩考察点'):
-                    return True
+                    extra_exit_by_level = True
                 if current_map.contains_entry('业绩考察点空'):
                     self.ctx.hollow_zero_record.no_eval_point = True
-                    return True
-            return False
-
-        if self.ctx.hollow_zero_config.extra_task == HollowZeroExtraTask.LEVEL_3.value.value:
+                    extra_exit_by_level = True
+        elif self.ctx.hollow_zero_config.extra_exit == HollowZeroExtraExitEnum.LEVEL_3_EVA.value.value:
             if level_info.level == 3 and level_info.phase == 1:
                 if self.ctx.hollow.had_been_entry('业绩考察点') and not current_map.contains_entry('业绩考察点'):
-                    return True
+                    extra_exit_by_level = True
                 if current_map.contains_entry('业绩考察点空'):
                     self.ctx.hollow_zero_record.no_eval_point = True
-                    return True
-            return False
+                    extra_exit_by_level = True
+
+        if self.ctx.hollow_zero_config.extra_task == HollowZeroExtraTask.EVA_POINT.value.value:
+            if self.ctx.hollow_zero_config.extra_exit == HollowZeroExtraExitEnum.COMPLETE.value.value:
+                return False
+            else:
+                return extra_exit_by_level
+        elif self.ctx.hollow_zero_config.extra_task == HollowZeroExtraTask.PERIOD_REWARD.value.value:
+            # 周期性奖励在关键进展的战斗后判断
+            if self.ctx.hollow_zero_config.extra_exit == HollowZeroExtraExitEnum.COMPLETE.value.value:
+                return False
+            else:
+                return extra_exit_by_level
 
         return False
 
@@ -209,6 +219,21 @@ class HollowRunner(ZOperation):
     def exit_hollow(self) -> OperationRoundResult:
         op = HollowExitByMenu(self.ctx)
         return self.round_by_op(op.execute())
+
+    @node_from(from_name='画面识别', status='通关-完成')
+    @operation_node(name='通关-完成')
+    def mission_complete(self) -> OperationRoundResult:
+        screen = self.screenshot()
+        result = self.round_by_find_and_click_area(screen, '零号空洞-事件', '通关-完成')
+        if result.is_success:
+            return self.round_wait(result.status, wait=1)
+
+        # 一直尝试点击直到出现街区
+        result = self.round_by_find_area(screen, '零号空洞-入口', '街区')
+        if result.is_success:
+            return self.round_success(result.status)
+
+        return self.round_retry(result.status, wait=1)
 
 
 def __debug():

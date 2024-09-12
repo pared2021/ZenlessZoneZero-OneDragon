@@ -1,5 +1,7 @@
-# 推荐配队: 强攻-击破-支援
-# 战斗逻辑: 由击破站场打失衡，优先使用强攻格挡，失衡后切支援再切强攻进行爆发输出
+# 推荐配队: 强攻-支援-异常(猫露派)
+# 战斗逻辑: 由异常站场打异常，优先使用强攻格挡，失衡后切支援再切强攻进行爆发输出
+# 作者   :  idk500
+# 已知问题: 露西的支援buff覆盖率太低, 后续优化
 allow_ultimate:
   - agent_type: "强攻"
 
@@ -17,20 +19,9 @@ scenes:
     handlers:
       - states: "![自定义-动作不打断, 0, 999]{1, 1} & [闪避识别-黄光]"
         sub_states:
-          # 失衡期间 保持强攻在场上
-          - states: "[自定义-连携换人, 0, 12]"
-            sub_states:
-              - states: "![前台-强攻]"
-                state_template: "双反模板-强攻"
-              - states: ""
-                sub_states:
-                  - state_template: "闪A模板-全角色"
-          # 普通时间段
-          - states: ""
-            sub_states:
-              - state_template: "双反模板-强攻"
-              - state_template: "双反模板-击破"
-              - state_template: "双反模板-下一个"
+          - state_template: "双反模板-强攻"
+          - state_template: "双反模板-异常"
+          - state_template: "双反模板-下一个"
       - states: "![自定义-动作不打断, 0, 999]{1, 1} & ([闪避识别-红光] | [闪避识别-声音])"
         sub_states:
           - state_template: "闪A模板-全角色"
@@ -62,9 +53,7 @@ scenes:
       - states: "[自定义-黄光切人, 0, 2] | [自定义-红光闪避, 0, 2] | [自定义-临时站场]"
         sub_states:
           - state_template: "站场模板-全角色"
-      - states: "[自定义-连携换人, 0, 12]"
+      - states: "[自定义-连携换人, 0, 12] | [自定义-连携换人, 0, 12]"
         sub_states:
           - state_template: "站场模板-强攻站场"
-      - state_template: "站场模板-击破站场"
-      - state_template: "站场模板-强攻站场"
-      - state_template: "站场模板-支援站场"
+      - state_template: "站场模板-异常站场"

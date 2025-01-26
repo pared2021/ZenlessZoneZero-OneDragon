@@ -4,6 +4,8 @@ dist/
 .idea/
 .vscode/
 __pycache__/
+deploy/
+recording.jsonl
 
 # 子模块
 test/
@@ -42,6 +44,7 @@ config/yolo.yml
 .conda/
 .vscode/
 .venv/
+notice_cache/
 
 # 需自行下载的模型文件
 models/

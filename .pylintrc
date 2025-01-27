@@ -1,0 +1,101 @@
+[MASTER]
+# 指定要检查的文件和目录
+files=src
+
+# 忽略文件和目录
+ignore=venv,migrations,.git,__pycache__,build,dist,.env
+
+# 忽略文件模式
+ignore-patterns=.*\.pyc$,.*\.pyo$,.*\.pyd$
+
+# Python 版本
+python-version=3.11
+
+# 使用缓存加速检查
+persistent=yes
+
+# 并行检查的工作进程数
+jobs=0
+
+# 扩展包白名单
+extension-pkg-whitelist=numpy,cv2,torch,PyQt5,PySide6
+
+[MESSAGES CONTROL]
+# 禁用所有检查，然后启用指定的检查
+disable=all
+enable=
+    F,          # 致命错误 (Fatal)
+    E,          # 错误 (Error)
+    W,          # 警告 (Warning)
+    C,          # 代码风格问题 (Convention)
+    R,          # 代码重构建议 (Refactor)
+
+# 禁用特定的检查
+disable=
+    too-many-lines,
+    too-many-arguments,
+    too-many-locals,
+    too-many-instance-attributes,
+    too-many-public-methods,
+    too-many-branches,
+    too-many-statements,
+    missing-docstring,
+    invalid-name,
+    no-else-return,
+    broad-except,
+    logging-format-interpolation,
+    logging-fstring-interpolation,
+    duplicate-code,
+    cyclic-import
+
+[REPORTS]
+output-format=text
+score=yes
+reports=no
+evaluation=10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)
+
+[FORMAT]
+max-line-length=120
+indent-string='    '
+indent-after-paren=4
+expected-line-ending-format=LF
+
+[BASIC]
+# 允许的短变量名
+good-names=i,j,k,ex,Run,_,fd,fp,id,ip,x,y,w,h
+
+# 变量命名规则
+variable-rgx=[a-z_][a-z0-9_]{0,30}$
+function-rgx=[a-z_][a-z0-9_]{0,30}$
+class-rgx=[A-Z_][a-zA-Z0-9]+$
+const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
+method-rgx=[a-z_][a-z0-9_]{0,30}$
+
+[TYPECHECK]
+# 忽略的模块
+ignored-modules=numpy,torch,cv2,PyQt5,PySide6,win32api,win32con,win32gui,PIL
+
+# 忽略的类
+ignored-classes=numpy,torch,cv2,QMainWindow,QWidget,QDialog
+
+# 生成的成员
+generated-members=numpy.*,torch.*,cv2.*,PyQt5.*,PySide6.*
+
+[DESIGN]
+max-args=10
+max-locals=20
+max-returns=8
+max-branches=15
+max-statements=60
+max-parents=7
+max-attributes=10
+min-public-methods=1
+max-public-methods=30
+
+[IMPORTS]
+# 允许通配符导入的模块
+allow-wildcard-with-all=no
+
+[LOGGING]
+logging-modules=logging
+logging-format-style=new

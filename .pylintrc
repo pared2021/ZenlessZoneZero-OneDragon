@@ -32,6 +32,19 @@ enable=
 
 # 禁用特定的检查
 disable=
+    C0111,      # missing-docstring
+    C0103,      # invalid-name
+    W0511,      # fixme
+    R0903,      # too-few-public-methods
+    R0913,      # too-many-arguments
+    R0914,      # too-many-locals
+    W0621,      # redefined-outer-name
+    W0703,      # broad-except
+    W0702,      # bare-except
+    C0303,      # trailing-whitespace
+    C0326,      # bad-whitespace
+    C0330,      # bad-continuation
+    C0301       # line-too-long
     too-many-lines,
     too-many-arguments,
     too-many-locals,
@@ -64,12 +77,17 @@ expected-line-ending-format=LF
 # 允许的短变量名
 good-names=i,j,k,ex,Run,_,fd,fp,id,ip,x,y,w,h
 
-# 变量命名规则
-variable-rgx=[a-z_][a-z0-9_]{0,30}$
-function-rgx=[a-z_][a-z0-9_]{0,30}$
-class-rgx=[A-Z_][a-zA-Z0-9]+$
+# 命名规则
+variable-rgx=[a-z_][a-z0-9_]{2,30}$
 const-rgx=(([A-Z_][A-Z0-9_]*)|(__.*__))$
-method-rgx=[a-z_][a-z0-9_]{0,30}$
+attr-rgx=[a-z_][a-z0-9_]{2,30}$
+argument-rgx=[a-z_][a-z0-9_]{2,30}$
+class-rgx=[A-Z_][a-zA-Z0-9]+$
+module-rgx=(([a-z_][a-z0-9_]*)|([A-Z][a-zA-Z0-9]+))$
+method-rgx=[a-z_][a-z0-9_]{2,30}$
+function-rgx=[a-z_][a-z0-9_]{2,30}$
+class-attribute-rgx=([A-Za-z_][A-Za-z0-9_]{2,30}|(__.*__))$
+inlinevar-rgx=[A-Za-z_][A-Za-z0-9_]*$
 
 [TYPECHECK]
 # 忽略的模块
@@ -95,6 +113,9 @@ max-public-methods=30
 [IMPORTS]
 # 允许通配符导入的模块
 allow-wildcard-with-all=no
+
+# 应该放在try/except中的模块
+analyse-fallback-blocks=no
 
 [LOGGING]
 logging-modules=logging

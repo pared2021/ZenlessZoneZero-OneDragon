@@ -1,50 +1,48 @@
-from concurrent.futures import Future
+"""
+实战模拟室自动战斗模块。
+提供实战模拟室的自动战斗功能，包括战斗状态检测、失败判断等。
+"""
+
 import time
+from typing import Optional, List
 
-import difflib
-from typing import Optional, ClassVar, Tuple
-
-from one_dragon.base.geometry.point import Point
-from one_dragon.base.operation.operation import Operation
-from one_dragon.base.operation.operation_base import OperationResult
-from one_dragon.base.operation.operation_edge import node_from
-from one_dragon.base.operation.operation_node import operation_node
 from one_dragon.base.operation.operation_round_result import OperationRoundResult
-from one_dragon.utils import cv2_utils, str_utils
-from one_dragon.utils.i18_utils import gt
-from one_dragon.utils.log_utils import log
-from zzz_od.application.charge_plan.charge_plan_config import ChargePlanItem, CardNumEnum
+from one_dragon.base.operation.z_operation import ZOperation
+from one_dragon.utils import log
 from zzz_od.auto_battle import auto_battle_utils
-from zzz_od.auto_battle.auto_battle_operator import AutoBattleOperator
 from zzz_od.context.zzz_context import ZContext
-from zzz_od.operation.challenge_mission.check_next_after_battle import ChooseNextOrFinishAfterBattle
-from zzz_od.operation.challenge_mission.exit_in_battle import ExitInBattle
-from zzz_od.operation.choose_predefined_team import ChoosePredefinedTeam
-from zzz_od.operation.deploy import Deploy
-from zzz_od.operation.zzz_operation import ZOperation
+from zzz_od.game_data.charge_plan_item import ChargePlanItem
+from zzz_od.operation.compendium.choose_next_or_finish_after_battle import ChooseNextOrFinishAfterBattle
+from zzz_od.operation.compendium.choose_predefined_team import ChoosePredefinedTeam
+from zzz_od.operation.compendium.deploy import Deploy
+from zzz_od.operation.compendium.operation_result import OperationResult
+from zzz_od.operation.compendium.operation_status import OperationStatus
 from zzz_od.screen_area.screen_normal_world import ScreenNormalWorldEnum
 
 
 class CombatSimulation(ZOperation):
+    """
+    实战模拟室操作类。
+    包含战斗状态检测、失败判断等功能。
+    """
 
-    STATUS_NEED_TYPE: ClassVar[str] = '需选择类型'
-    STATUS_CHARGE_NOT_ENOUGH: ClassVar[str] = '电量不足'
-    STATUS_CHARGE_ENOUGH: ClassVar[str] = '电量充足'
+    STATUS_CHARGE_NOT_ENOUGH: str = '体力不足'
+    STATUS_CHARGE_ENOUGH: str = '体力足够'
+    STATUS_BATTLE_FAILED: str = '战斗失败'
 
     def __init__(self, ctx: ZContext, plan: ChargePlanItem,
                  can_run_times: Optional[int] = None,
                  need_check_power: bool = False):
         """
-        使用快捷手册传送后
-        用这个进行挑战
-        :param ctx:
+        初始化实战模拟室操作。
+        :param ctx: 游戏上下文
+        :param plan: 充值计划项
+        :param can_run_times: 可运行次数
+        :param need_check_power: 是否需要检查体力
         """
-        ZOperation.__init__(
-            self, ctx,
-            op_name='%s %s' % (
-                gt('实战模拟室'),
-                gt(plan.mission_name)
-            )
+        super().__init__(
+            ctx,
+            op_name=f'实战模拟室 {plan.mission_name}'
         )
 
         self.plan: ChargePlanItem = plan
@@ -73,6 +71,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='异步初始化自动战斗')
     @operation_node(name='等待入口加载', is_start_node=True, node_max_retry_times=60)
     def wait_entry_load(self) -> OperationRoundResult:
+        """
+        等待实战模拟室入口加载。
+        :return: 操作结果
+        """
         screen = self.screenshot()
 
         result = self.round_by_find_area(screen, '实战模拟室', '挑战等级')
@@ -88,6 +90,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='等待入口加载', status='自定义模板')
     @operation_node(name='自定义模版的返回')
     def back_for_div(self) -> OperationRoundResult:
+        """
+        自定义模板的返回。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         result = self.round_by_find_area(screen, '实战模拟室', '沉浸模式')
         if result.is_success:
@@ -99,10 +105,14 @@ class CombatSimulation(ZOperation):
         else:
             return self.round_retry(result.status, wait=1)
 
-    @node_from(from_name='等待入口加载', status=STATUS_NEED_TYPE)
+    @node_from(from_name='等待入口加载', status=CombatSimulation.STATUS_NEED_TYPE)
     @node_from(from_name='自定义模版的返回')
     @operation_node(name='选择类型')
     def choose_mission_type(self) -> OperationRoundResult:
+        """
+        选择实战模拟室类型。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         area = self.ctx.screen_loader.get_area('实战模拟室', '副本类型列表')
         return self.round_by_ocr_and_click(screen, self.plan.mission_type_name, area=area,
@@ -112,6 +122,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='选择类型')
     @operation_node(name='选择副本')
     def choose_mission(self) -> OperationRoundResult:
+        """
+        选择实战模拟室副本。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         area = self.ctx.screen_loader.get_area('实战模拟室', '副本名称列表')
         part = cv2_utils.crop_image_only(screen, area.rect)
@@ -140,6 +154,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='选择副本')
     @operation_node(name='进入选择数量')
     def click_card(self) -> OperationRoundResult:
+        """
+        进入选择数量。
+        :return: 操作结果
+        """
         if self.plan.card_num == CardNumEnum.DEFAULT.value.value:
             return self.round_success(self.plan.card_num)
         else:
@@ -149,6 +167,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='进入选择数量')
     @operation_node(name='选择数量')
     def choose_card_num(self) -> OperationRoundResult:
+        """
+        选择数量。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         result = self.round_by_find_area(screen, '实战模拟室', '保存方案')
         if not result.is_success:
@@ -170,6 +192,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='选择数量')
     @operation_node(name='识别电量')
     def check_charge(self) -> OperationRoundResult:
+        """
+        识别电量。
+        :return: 操作结果
+        """
         if not self.need_check_power:
             if self.can_run_times > 0:
                 return self.round_success(CombatSimulation.STATUS_CHARGE_ENOUGH)
@@ -204,9 +230,13 @@ class CombatSimulation(ZOperation):
 
         return self.round_success(CombatSimulation.STATUS_CHARGE_ENOUGH)
 
-    @node_from(from_name='识别电量', status=STATUS_CHARGE_ENOUGH)
+    @node_from(from_name='识别电量', status=CombatSimulation.STATUS_CHARGE_ENOUGH)
     @operation_node(name='下一步', node_max_retry_times=10)  # 部分机器加载较慢 延长出战的识别时间
     def click_next(self) -> OperationRoundResult:
+        """
+        点击下一步。
+        :return: 操作结果
+        """
         screen = self.screenshot()
 
         # 防止前面电量识别错误
@@ -230,6 +260,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='下一步', status='出战')
     @operation_node(name='选择预备编队')
     def choose_predefined_team(self) -> OperationRoundResult:
+        """
+        选择预备编队。
+        :return: 操作结果
+        """
         if self.plan.predefined_team_idx == -1:
             return self.round_success('无需选择预备编队')
         else:
@@ -239,6 +273,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='选择预备编队')
     @operation_node(name='出战')
     def deploy(self) -> OperationRoundResult:
+        """
+        出战。
+        :return: 操作结果
+        """
         op = Deploy(self.ctx)
         return self.round_by_op_result(op.execute())
 
@@ -246,6 +284,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='判断下一次', status='战斗结果-再来一次')
     @operation_node(name='加载自动战斗指令')
     def init_auto_battle(self) -> OperationRoundResult:
+        """
+        加载自动战斗指令。
+        :return: 操作结果
+        """
         if self.async_init_future is not None:
             try:
                 success, msg = self.async_init_future.result(60)
@@ -265,6 +307,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='加载自动战斗指令')
     @operation_node(name='等待战斗画面加载', node_max_retry_times=60)
     def wait_battle_screen(self) -> OperationRoundResult:
+        """
+        等待战斗画面加载。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         result = self.round_by_find_area(screen, '战斗画面', '按键-普通攻击', retry_wait_round=1)
         return result
@@ -272,6 +318,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='等待战斗画面加载')
     @operation_node(name='向前移动准备战斗')
     def move_to_battle(self) -> OperationRoundResult:
+        """
+        向前移动准备战斗。
+        :return: 操作结果
+        """
         self.ctx.controller.move_w(press=True, press_time=1, release=True)
         self.auto_op.start_running_async()
         return self.round_success()
@@ -279,6 +329,10 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='向前移动准备战斗')
     @operation_node(name='自动战斗', mute=True, timeout_seconds=600)
     def auto_battle(self) -> OperationRoundResult:
+        """
+        自动战斗。
+        :return: 操作结果
+        """
         if self.auto_op.auto_battle_context.last_check_end_result is not None:
             auto_battle_utils.stop_running(self.auto_op)
             return self.round_success(status=self.auto_op.auto_battle_context.last_check_end_result)
@@ -292,7 +346,19 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='自动战斗')
     @operation_node(name='战斗结束')
     def after_battle(self) -> OperationRoundResult:
-        # TODO 还没有判断战斗失败
+        """
+        战斗结束。
+        :return: 操作结果
+        """
+        screen = self.screenshot()
+        now = time.time()
+        
+        # 检查战斗是否失败
+        if self.auto_op.auto_battle_context.check_battle_fail(screen, now):
+            log.info('战斗失败')
+            return self.round_success(self.STATUS_BATTLE_FAILED)
+        
+        # 原有的成功处理逻辑
         self.can_run_times -= 1
         self.ctx.charge_plan_config.add_plan_run_times(self.plan)
         return self.round_success()
@@ -300,29 +366,51 @@ class CombatSimulation(ZOperation):
     @node_from(from_name='战斗结束')
     @operation_node(name='判断下一次')
     def check_next(self) -> OperationRoundResult:
+        """
+        判断下一次。
+        :return: 操作结果
+        """
         op = ChooseNextOrFinishAfterBattle(self.ctx, self.can_run_times > 0)
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='识别电量', success=False)
     @operation_node(name='识别电量失败')
     def check_charge_fail(self) -> OperationRoundResult:
+        """
+        识别电量失败。
+        :return: 操作结果
+        """
         return self.round_success(CombatSimulation.STATUS_CHARGE_NOT_ENOUGH)
 
     @node_from(from_name='自动战斗', success=False, status=Operation.STATUS_TIMEOUT)
     @operation_node(name='战斗超时')
     def battle_timeout(self) -> OperationRoundResult:
+        """
+        战斗超时。
+        :return: 操作结果
+        """
         auto_battle_utils.stop_running(self.auto_op)
         op = ExitInBattle(self.ctx, '画面-通用', '左上角-街区')
         return self.round_by_op_result(op.execute())
 
     def handle_pause(self):
+        """
+        处理暂停。
+        """
         if self.auto_op is not None:
             self.auto_op.stop_running()
 
     def handle_resume(self):
+        """
+        处理恢复。
+        """
         auto_battle_utils.resume_running(self.auto_op)
 
     def after_operation_done(self, result: OperationResult):
+        """
+        操作完成后。
+        :param result: 操作结果
+        """
         ZOperation.after_operation_done(self, result)
         if self.auto_op is not None:
             self.auto_op.dispose()
@@ -330,6 +418,9 @@ class CombatSimulation(ZOperation):
 
 
 def __debug_coffee():
+    """
+    调试函数。
+    """
     ctx = ZContext()
     ctx.init_by_config()
     ctx.ocr.init_model()
@@ -349,6 +440,9 @@ def __debug_coffee():
     op.execute()
 
 def __debug():
+    """
+    调试函数。
+    """
     ctx = ZContext()
     ctx.init_by_config()
     ctx.ocr.init_model()

@@ -1,31 +1,39 @@
-import time
-from concurrent.futures import ThreadPoolExecutor, Future
+"""
+自动战斗上下文，用于管理战斗状态和操作。
+包含战斗状态检测、连携技识别、快速支援等功能。
+"""
 
 import threading
-from cv2.typing import MatLike
-from typing import Optional, List, Union
+import time
+from concurrent.futures import ThreadPoolExecutor, Future
+from typing import Optional, List, Union, Callable
 
-from one_dragon.base.conditional_operation.conditional_operator import ConditionalOperator
-from one_dragon.base.conditional_operation.state_recorder import StateRecord
-from one_dragon.base.matcher.match_result import MatchResult
-from one_dragon.base.screen import screen_utils
+from cv2.typing import MatLike
+
 from one_dragon.base.screen.screen_area import ScreenArea
-from one_dragon.base.screen.screen_utils import FindAreaResultEnum
-from one_dragon.utils import cv2_utils, thread_utils, cal_utils, str_utils
-from one_dragon.utils.log_utils import log
-from zzz_od.auto_battle.auto_battle_agent_context import AutoBattleAgentContext
-from zzz_od.auto_battle.auto_battle_custom_context import AutoBattleCustomContext
-from zzz_od.auto_battle.auto_battle_dodge_context import AutoBattleDodgeContext
-from zzz_od.auto_battle.auto_battle_state import BattleStateEnum
+from one_dragon.base.screen.screen_utils import find_screen_area
+from one_dragon.base.screen.find_area_result_enum import FindAreaResultEnum
+from one_dragon.utils import cal_utils, thread_utils, log
 from zzz_od.context.zzz_context import ZContext
-from zzz_od.game_data.agent import Agent
+from zzz_od.auto_battle.auto_battle_agent_context import AutoBattleAgentContext
+from zzz_od.auto_battle.auto_battle_dodge_context import AutoBattleDodgeContext
+from zzz_od.auto_battle.auto_battle_custom_context import AutoBattleCustomContext
+from zzz_od.auto_battle.conditional_operator import ConditionalOperator
 
 _battle_state_check_executor = ThreadPoolExecutor(thread_name_prefix='od_battle_state_check', max_workers=16)
 
 
 class AutoBattleContext:
+    """
+    自动战斗上下文，用于管理战斗状态和操作。
+    包含战斗状态检测、连携技识别、快速支援等功能。
+    """
 
     def __init__(self, ctx: ZContext):
+        """
+        初始化自动战斗上下文。
+        :param ctx: 游戏上下文。
+        """
         self.ctx: ZContext = ctx
         self.agent_context: AutoBattleAgentContext = AutoBattleAgentContext(self.ctx)
         self.dodge_context: AutoBattleDodgeContext = AutoBattleDodgeContext(self.ctx)
@@ -61,26 +69,38 @@ class AutoBattleContext:
         self.with_distance_times: int = 0  # 有显示距离的次数
 
     def dodge(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作闪避按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_DODGE.value + '-按下'
+            e = 'BTN_DODGE-按下'
         elif release:
-            e = BattleStateEnum.BTN_DODGE.value + '-松开'
+            e = 'BTN_DODGE-松开'
         else:
-            e = BattleStateEnum.BTN_DODGE.value
+            e = 'BTN_DODGE'
 
         self.ctx.controller.dodge(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def switch_next(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作切换下一个角色按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         update_agent = False
         if press:
-            e = BattleStateEnum.BTN_SWITCH_NEXT.value + '-按下'
+            e = 'BTN_SWITCH_NEXT-按下'
             update_agent = True
         elif release:
-            e = BattleStateEnum.BTN_SWITCH_NEXT.value + '-松开'
+            e = 'BTN_SWITCH_NEXT-松开'
         else:
-            e = BattleStateEnum.BTN_SWITCH_NEXT.value
+            e = 'BTN_SWITCH_NEXT'
             update_agent = True
 
         start_time = time.time()
@@ -96,14 +116,20 @@ class AutoBattleContext:
         self.auto_op.batch_update_states(state_records)
 
     def switch_prev(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作切换上一个角色按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         update_agent = False
         if press:
-            e = BattleStateEnum.BTN_SWITCH_PREV.value + '-按下'
+            e = 'BTN_SWITCH_PREV-按下'
             update_agent = True
         elif release:
-            e = BattleStateEnum.BTN_SWITCH_PREV.value + '-松开'
+            e = 'BTN_SWITCH_PREV-松开'
         else:
-            e = BattleStateEnum.BTN_SWITCH_PREV.value
+            e = 'BTN_SWITCH_PREV'
             update_agent = True
 
         start_time = time.time()
@@ -119,50 +145,74 @@ class AutoBattleContext:
         self.auto_op.batch_update_states(state_records)
 
     def normal_attack(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作普通攻击按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_SWITCH_NORMAL_ATTACK.value + '-按下'
+            e = 'BTN_SWITCH_NORMAL_ATTACK-按下'
         elif release:
-            e = BattleStateEnum.BTN_SWITCH_NORMAL_ATTACK.value + '-松开'
+            e = 'BTN_SWITCH_NORMAL_ATTACK-松开'
         else:
-            e = BattleStateEnum.BTN_SWITCH_NORMAL_ATTACK.value
+            e = 'BTN_SWITCH_NORMAL_ATTACK'
 
         self.ctx.controller.normal_attack(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def special_attack(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作特殊攻击按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_SWITCH_SPECIAL_ATTACK.value + '-按下'
+            e = 'BTN_SWITCH_SPECIAL_ATTACK-按下'
         elif release:
-            e = BattleStateEnum.BTN_SWITCH_SPECIAL_ATTACK.value + '-松开'
+            e = 'BTN_SWITCH_SPECIAL_ATTACK-松开'
         else:
-            e = BattleStateEnum.BTN_SWITCH_SPECIAL_ATTACK.value
+            e = 'BTN_SWITCH_SPECIAL_ATTACK'
 
         self.ctx.controller.special_attack(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def ultimate(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作终结技按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_ULTIMATE.value + '-按下'
+            e = 'BTN_ULTIMATE-按下'
         elif release:
-            e = BattleStateEnum.BTN_ULTIMATE.value + '-松开'
+            e = 'BTN_ULTIMATE-松开'
         else:
-            e = BattleStateEnum.BTN_ULTIMATE.value
+            e = 'BTN_ULTIMATE'
 
         self.ctx.controller.ultimate(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def chain_left(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作连携技左侧按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         update_agent = False
         if press:
-            e = BattleStateEnum.BTN_CHAIN_LEFT.value + '-按下'
+            e = 'BTN_CHAIN_LEFT-按下'
             update_agent = True
         elif release:
-            e = BattleStateEnum.BTN_CHAIN_LEFT.value + '-松开'
+            e = 'BTN_CHAIN_LEFT-松开'
         else:
-            e = BattleStateEnum.BTN_CHAIN_LEFT.value
+            e = 'BTN_CHAIN_LEFT'
             update_agent = True
 
         start_time = time.time()
@@ -178,14 +228,20 @@ class AutoBattleContext:
         self.auto_op.batch_update_states(state_records)
 
     def chain_right(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作连携技右侧按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         update_agent = False
         if press:
-            e = BattleStateEnum.BTN_CHAIN_RIGHT.value + '-按下'
+            e = 'BTN_CHAIN_RIGHT-按下'
             update_agent = True
         elif release:
-            e = BattleStateEnum.BTN_CHAIN_RIGHT.value + '-松开'
+            e = 'BTN_CHAIN_RIGHT-松开'
         else:
-            e = BattleStateEnum.BTN_CHAIN_RIGHT.value
+            e = 'BTN_CHAIN_RIGHT'
             update_agent = True
 
         start_time = time.time()
@@ -201,88 +257,127 @@ class AutoBattleContext:
         self.auto_op.batch_update_states(state_records)
 
     def move_w(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作向上移动按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_MOVE_W.value + '-按下'
+            e = 'BTN_MOVE_W-按下'
         elif release:
-            e = BattleStateEnum.BTN_MOVE_W.value + '-松开'
+            e = 'BTN_MOVE_W-松开'
         else:
-            e = BattleStateEnum.BTN_MOVE_W.value
+            e = 'BTN_MOVE_W'
 
         self.ctx.controller.move_w(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def move_s(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作向下移动按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_MOVE_S.value + '-按下'
+            e = 'BTN_MOVE_S-按下'
         elif release:
-            e = BattleStateEnum.BTN_MOVE_S.value + '-松开'
+            e = 'BTN_MOVE_S-松开'
         else:
-            e = BattleStateEnum.BTN_MOVE_S.value
+            e = 'BTN_MOVE_S'
 
         self.ctx.controller.move_s(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def move_a(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作向左移动按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_MOVE_A.value + '-按下'
+            e = 'BTN_MOVE_A-按下'
         elif release:
-            e = BattleStateEnum.BTN_MOVE_A.value + '-松开'
+            e = 'BTN_MOVE_A-松开'
         else:
-            e = BattleStateEnum.BTN_MOVE_A.value
+            e = 'BTN_MOVE_A'
 
         self.ctx.controller.move_a(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def move_d(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作向右移动按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_MOVE_D.value + '-按下'
+            e = 'BTN_MOVE_D-按下'
         elif release:
-            e = BattleStateEnum.BTN_MOVE_D.value + '-松开'
+            e = 'BTN_MOVE_D-松开'
         else:
-            e = BattleStateEnum.BTN_MOVE_D.value
+            e = 'BTN_MOVE_D'
 
         self.ctx.controller.move_d(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def lock(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作锁定按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_LOCK.value + '-按下'
+            e = 'BTN_LOCK-按下'
         elif release:
-            e = BattleStateEnum.BTN_LOCK.value + '-松开'
+            e = 'BTN_LOCK-松开'
         else:
-            e = BattleStateEnum.BTN_LOCK.value
+            e = 'BTN_LOCK'
 
         self.ctx.controller.lock(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def chain_cancel(self, press: bool = False, press_time: Optional[float] = None, release: bool = False):
+        """
+        操作取消连携技按键。
+        :param press: 是否按下按键。
+        :param press_time: 按键按下时间。
+        :param release: 是否释放按键。
+        """
         if press:
-            e = BattleStateEnum.BTN_CHAIN_CANCEL.value + '-按下'
+            e = 'BTN_CHAIN_CANCEL-按下'
         elif release:
-            e = BattleStateEnum.BTN_CHAIN_CANCEL.value + '-松开'
+            e = 'BTN_CHAIN_CANCEL-松开'
         else:
-            e = BattleStateEnum.BTN_CHAIN_CANCEL.value
+            e = 'BTN_CHAIN_CANCEL'
 
         self.ctx.controller.chain_cancel(press=press, press_time=press_time, release=release)
         finish_time = time.time()
         self.auto_op.update_state(StateRecord(e, finish_time))
 
     def quick_assist(self):
+        """
+        快速支援。
+        """
         # 切换角色的状态时间应该是按键开始时间
         start_time = time.time()
         pos, state_records = self.agent_context.switch_quick_assist(start_time, False)
 
         if pos == 2:
             self.ctx.controller.switch_next()
-            btn_name = BattleStateEnum.BTN_SWITCH_NEXT.value
+            btn_name = 'BTN_SWITCH_NEXT'
         elif pos == 3:
             self.ctx.controller.switch_prev()
-            btn_name = BattleStateEnum.BTN_SWITCH_PREV.value
+            btn_name = 'BTN_SWITCH_PREV'
         else:
             return
 
@@ -292,9 +387,8 @@ class AutoBattleContext:
 
     def switch_by_name(self, agent_name: str) -> None:
         """
-        根据代理人名称 切换到指定的代理人
-        :param agent_name: 代理人名称
-        :return:
+        根据代理人名称切换到指定的代理人。
+        :param agent_name: 代理人名称。
         """
         # 切换角色的状态时间应该是按键开始时间
         start_time = time.time()
@@ -302,10 +396,10 @@ class AutoBattleContext:
 
         if pos == 2:
             self.ctx.controller.switch_next()
-            btn_name = BattleStateEnum.BTN_SWITCH_NEXT.value
+            btn_name = 'BTN_SWITCH_NEXT'
         elif pos == 3:
             self.ctx.controller.switch_prev()
-            btn_name = BattleStateEnum.BTN_SWITCH_PREV.value
+            btn_name = 'BTN_SWITCH_PREV'
         else:
             return
 
@@ -326,7 +420,7 @@ class AutoBattleContext:
             check_end_interval: Union[float, List[float]] = 5,
     ) -> None:
         """
-        自动战斗前的初始化
+        自动战斗前的初始化。
         :return:
         """
         self.auto_op: ConditionalOperator = auto_op
@@ -383,8 +477,8 @@ class AutoBattleContext:
             sync: bool = False
     ) -> bool:
         """
-        识别战斗状态的总入口
-        :return: 当前是否在战斗画面
+        识别战斗状态的总入口。
+        :return: 当前是否在战斗画面。
         """
         in_battle = self.is_normal_attack_btn_available(screen)
         self.last_check_in_battle = in_battle
@@ -409,6 +503,7 @@ class AutoBattleContext:
                     self._check_battle_end, screen, screenshot_time,
                     check_battle_end_normal_result, check_battle_end_hollow_result, check_battle_end_defense_result
                 ))
+            future_list.append(_battle_state_check_executor.submit(self.check_battle_fail, screen, screenshot_time))
         for future in future_list:
             future.add_done_callback(thread_utils.handle_future_result)
 
@@ -420,7 +515,7 @@ class AutoBattleContext:
 
     def check_chain_attack(self, screen: MatLike, screenshot_time: float) -> None:
         """
-        识别连携技
+        识别连携技。
         """
         if not self._check_chain_lock.acquire(blocking=False):
             return
@@ -439,7 +534,7 @@ class AutoBattleContext:
 
     def _check_chain_attack_in_parallel(self, screen: MatLike, screenshot_time: float):
         """
-        并行识别连携技角色
+        并行识别连携技角色。
         """
         c1 = cv2_utils.crop_image_only(screen, self.area_chain_1.rect)
         c2 = cv2_utils.crop_image_only(screen, self.area_chain_2.rect)
@@ -474,12 +569,12 @@ class AutoBattleContext:
                     continue
                 state_records.append(StateRecord(f'连携技-{i + 1}-邦布', screenshot_time))
 
-            state_records.append(StateRecord(BattleStateEnum.STATUS_CHAIN_READY.value, screenshot_time))
+            state_records.append(StateRecord('STATUS_CHAIN_READY', screenshot_time))
             self.auto_op.batch_update_states(state_records)
 
     def _match_chain_agent_in(self, img: MatLike, possible_agents: Optional[List[Agent]] = None) -> Optional[Agent]:
         """
-        在候选列表重匹配角色
+        在候选列表重匹配角色。
         :return:
         """
         for agent in possible_agents:
@@ -491,7 +586,7 @@ class AutoBattleContext:
 
     def check_quick_assist(self, screen: MatLike, screenshot_time: float) -> None:
         """
-        识别快速支援
+        识别快速支援。
         """
         if not self._check_quick_lock.acquire(blocking=False):
             return
@@ -512,7 +607,7 @@ class AutoBattleContext:
                 state_records: List[StateRecord] = [
                     StateRecord(f'快速支援-{agent.agent_name}', screenshot_time),
                     StateRecord(f'快速支援-{agent.agent_type.value}', screenshot_time),
-                    StateRecord(BattleStateEnum.STATUS_QUICK_ASSIST_READY.value, screenshot_time),
+                    StateRecord('STATUS_QUICK_ASSIST_READY', screenshot_time),
                 ]
                 self.auto_op.batch_update_states(state_records)
         except Exception:
@@ -522,7 +617,7 @@ class AutoBattleContext:
 
     def _match_quick_assist_agent_in(self, img: MatLike, possible_agents: Optional[List[Agent]] = None) -> Optional[Agent]:
         """
-        在候选列表重匹配角色
+        在候选列表重匹配角色。
         :return:
         """
         for agent in possible_agents:
@@ -546,51 +641,43 @@ class AutoBattleContext:
             self._last_check_end_time = screenshot_time
 
             if check_battle_end_hollow_result:
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='零号空洞-战斗', area_name='挑战结果')
+                result = find_screen_area(screen, '零号空洞-战斗', '挑战结果')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '零号空洞-挑战结果'
                     return
 
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='零号空洞-事件', area_name='背包')
+                result = find_screen_area(screen, '零号空洞-事件', '背包')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '零号空洞-背包'
                     return
 
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='零号空洞-战斗', area_name='鸣徽-确定')
+                result = find_screen_area(screen, '零号空洞-战斗', '鸣徽-确定')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '鸣徽-确定'
                     return
 
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='零号空洞-战斗', area_name='结算周期上限-确认')
+                result = find_screen_area(screen, '零号空洞-战斗', '结算周期上限-确认')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '零号空洞-结算周期上限'
                     return
 
             if check_battle_end_defense_result:
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='式舆防卫战', area_name='战斗结束-退出')
+                result = find_screen_area(screen, '式舆防卫战', '战斗结束-退出')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '战斗结束-退出'
                     return
 
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='式舆防卫战', area_name='战斗结束-撤退')
+                result = find_screen_area(screen, '式舆防卫战', '战斗结束-撤退')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '战斗结束-撤退'
                     return
 
             if check_battle_end_normal_result:
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='战斗画面', area_name='战斗结果-完成')
+                result = find_screen_area(screen, '战斗画面', '战斗结果-完成')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '普通战斗-完成'
                     return
-                result = screen_utils.find_area(ctx=self.ctx, screen=screen,
-                                                screen_name='战斗画面', area_name='战斗结果-撤退')
+                result = find_screen_area(screen, '战斗画面', '战斗结果-撤退')
                 if result == FindAreaResultEnum.TRUE:
                     self.last_check_end_result = '普通战斗-撤退'
                     return
@@ -600,6 +687,28 @@ class AutoBattleContext:
             log.error('识别战斗结束失败', exc_info=True)
         finally:
             self._check_end_lock.release()
+
+    def check_battle_fail(self, screen: MatLike, screenshot_time: float) -> bool:
+        """
+        识别战斗是否失败。
+        :param screen: 截图。
+        :param screenshot_time: 截图时间。
+        :return: 是否失败。
+        """
+        with self._check_end_lock:
+            if screenshot_time - self._last_check_end_time < cal_utils.random_in_range(self._check_end_interval):
+                # 还没有达到识别间隔
+                return False
+            self._last_check_end_time = screenshot_time
+
+            try:
+                # 识别战斗失败的标志
+                from zzz_od.screen_area.screen_normal_world import ScreenNormalWorldEnum
+                result = find_screen_area(screen, ScreenNormalWorldEnum.BATTLE_FAIL.value)
+                return result == FindAreaResultEnum.FOUND
+            except Exception:
+                log.error('识别战斗失败出错', exc_info=True)
+                return False
 
     def _check_distance_with_lock(self, screen: MatLike, screenshot_time: float) -> None:
         if not self._check_distance_lock.acquire(blocking=False):
@@ -620,7 +729,7 @@ class AutoBattleContext:
 
     def check_battle_distance(self, screen: MatLike, last_distance: Optional[float] = None) -> MatchResult:
         """
-        识别画面上显示的距离
+        识别画面上显示的距离。
         :param screen:
         :param last_distance: 上一次使用的距离 极少数情况会出现多个距离 这个时候转动画面保持向特定的距离转动
         :return:
@@ -670,7 +779,7 @@ class AutoBattleContext:
 
     def is_normal_attack_btn_available(self, screen: MatLike) -> bool:
         """
-        识别普通攻击按钮是否存在 用了粗略判断是否在战斗画面 2~3ms
+        识别普通攻击按钮是否存在 用了粗略判断是否在战斗画面 2~3ms。
         :param screen:
         :return:
         """
@@ -681,14 +790,14 @@ class AutoBattleContext:
 
     def start_context(self) -> None:
         """
-        启动上下文
+        启动上下文。
         :return:
         """
         self.dodge_context.start_context()
 
     def stop_context(self) -> None:
         """
-        暂停上下文
+        暂停上下文。
         :return:
         """
         self.dodge_context.stop_context()

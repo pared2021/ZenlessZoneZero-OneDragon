@@ -1,3 +1,8 @@
+"""
+专业挑战室自动战斗模块。
+提供专业挑战室的自动战斗功能，包括战斗状态检测、失败判断等。
+"""
+
 import time
 
 from typing import Optional, ClassVar
@@ -15,33 +20,36 @@ from zzz_od.auto_battle import auto_battle_utils
 from zzz_od.auto_battle.auto_battle_operator import AutoBattleOperator
 from zzz_od.context.zzz_context import ZContext
 from zzz_od.operation.challenge_mission.check_next_after_battle import ChooseNextOrFinishAfterBattle
-from zzz_od.operation.challenge_mission.exit_in_battle import ExitInBattle
 from zzz_od.operation.choose_predefined_team import ChoosePredefinedTeam
 from zzz_od.operation.deploy import Deploy
+from zzz_od.operation.exit_in_battle import ExitInBattle
 from zzz_od.operation.zzz_operation import ZOperation
 from zzz_od.screen_area.screen_normal_world import ScreenNormalWorldEnum
 
 
 class ExpertChallenge(ZOperation):
+    """
+    专业挑战室操作类。
+    包含战斗状态检测、失败判断等功能。
+    """
 
     STATUS_CHARGE_NOT_ENOUGH: ClassVar[str] = '电量不足'
     STATUS_CHARGE_ENOUGH: ClassVar[str] = '电量充足'
+    STATUS_BATTLE_FAILED: ClassVar[str] = '战斗失败'
 
     def __init__(self, ctx: ZContext, plan: ChargePlanItem,
                  can_run_times: Optional[int] = None,
-                 need_check_power: bool = False
-                 ):
+                 need_check_power: bool = False):
         """
-        使用快捷手册传送后
-        用这个进行挑战
-        :param ctx:
+        初始化专业挑战室操作。
+        :param ctx: 游戏上下文
+        :param plan: 充值计划项
+        :param can_run_times: 可运行次数
+        :param need_check_power: 是否需要检查体力
         """
         ZOperation.__init__(
             self, ctx,
-            op_name='%s %s' % (
-                gt('专业挑战室'),
-                gt(plan.mission_type_name)
-            )
+            op_name=f'{gt("专业挑战室")} {gt(plan.mission_type_name)}'
         )
 
         self.plan: ChargePlanItem = plan
@@ -54,6 +62,10 @@ class ExpertChallenge(ZOperation):
 
     @operation_node(name='等待入口加载', is_start_node=True, node_max_retry_times=60)
     def wait_entry_load(self) -> OperationRoundResult:
+        """
+        等待入口加载。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         return self.round_by_find_area(
             screen, '实战模拟室', '挑战等级',
@@ -63,6 +75,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='等待入口加载')
     @operation_node(name='识别电量')
     def check_charge(self) -> OperationRoundResult:
+        """
+        识别电量。
+        :return: 操作结果
+        """
         if not self.need_check_power:
             if self.can_run_times > 0:
                 return self.round_success(ExpertChallenge.STATUS_CHARGE_ENOUGH)
@@ -99,6 +115,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='识别电量', status=STATUS_CHARGE_ENOUGH)
     @operation_node(name='下一步', node_max_retry_times=10)  # 部分机器加载较慢 延长出战的识别时间
     def click_next(self) -> OperationRoundResult:
+        """
+        点击下一步。
+        :return: 操作结果
+        """
         screen = self.screenshot()
 
         # 防止前面电量识别错误
@@ -122,6 +142,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='下一步', status='出战')
     @operation_node(name='选择预备编队')
     def choose_predefined_team(self) -> OperationRoundResult:
+        """
+        选择预备编队。
+        :return: 操作结果
+        """
         if self.plan.predefined_team_idx == -1:
             return self.round_success('无需选择预备编队')
         else:
@@ -131,6 +155,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='选择预备编队')
     @operation_node(name='出战')
     def deploy(self) -> OperationRoundResult:
+        """
+        出战。
+        :return: 操作结果
+        """
         op = Deploy(self.ctx)
         return self.round_by_op_result(op.execute())
 
@@ -138,6 +166,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='判断下一次', status='战斗结果-再来一次')
     @operation_node(name='加载自动战斗指令')
     def init_auto_battle(self) -> OperationRoundResult:
+        """
+        加载自动战斗指令。
+        :return: 操作结果
+        """
         if self.plan.predefined_team_idx == -1:
             auto_battle = self.plan.auto_battle_config
         else:
@@ -149,6 +181,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='加载自动战斗指令')
     @operation_node(name='等待战斗画面加载', node_max_retry_times=60)
     def wait_battle_screen(self) -> OperationRoundResult:
+        """
+        等待战斗画面加载。
+        :return: 操作结果
+        """
         screen = self.screenshot()
         result = self.round_by_find_area(screen, '战斗画面', '按键-普通攻击', retry_wait_round=1)
         return result
@@ -156,6 +192,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='等待战斗画面加载')
     @operation_node(name='向前移动准备战斗')
     def move_to_battle(self) -> OperationRoundResult:
+        """
+        向前移动准备战斗。
+        :return: 操作结果
+        """
         self.ctx.controller.move_w(press=True, press_time=1, release=True)
         self.auto_op.start_running_async()
         return self.round_success()
@@ -163,6 +203,10 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='向前移动准备战斗')
     @operation_node(name='自动战斗', mute=True, timeout_seconds=600)
     def auto_battle(self) -> OperationRoundResult:
+        """
+        自动战斗。
+        :return: 操作结果
+        """
         if self.auto_op.auto_battle_context.last_check_end_result is not None:
             auto_battle_utils.stop_running(self.auto_op)
             return self.round_success(status=self.auto_op.auto_battle_context.last_check_end_result)
@@ -176,7 +220,19 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='自动战斗')
     @operation_node(name='战斗结束')
     def after_battle(self) -> OperationRoundResult:
-        # TODO 还没有判断战斗失败
+        """
+        战斗结束。
+        :return: 操作结果
+        """
+        screen = self.screenshot()
+        now = time.time()
+        
+        # 检查战斗是否失败
+        if self.auto_op.auto_battle_context.check_battle_fail(screen, now):
+            log.info('战斗失败')
+            return self.round_success(self.STATUS_BATTLE_FAILED)
+        
+        # 原有的成功处理逻辑
         self.can_run_times -= 1
         self.ctx.charge_plan_config.add_plan_run_times(self.plan)
         return self.round_success()
@@ -184,17 +240,29 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='战斗结束')
     @operation_node(name='判断下一次')
     def check_next(self) -> OperationRoundResult:
+        """
+        检查是否继续下一轮。
+        :return: 操作结果
+        """
         op = ChooseNextOrFinishAfterBattle(self.ctx, self.can_run_times > 0)
         return self.round_by_op_result(op.execute())
 
     @node_from(from_name='识别电量', success=False)
     @operation_node(name='识别电量失败')
     def check_charge_fail(self) -> OperationRoundResult:
+        """
+        识别电量失败。
+        :return: 操作结果
+        """
         return self.round_success(ExpertChallenge.STATUS_CHARGE_NOT_ENOUGH)
 
     @node_from(from_name='自动战斗', success=False, status=Operation.STATUS_TIMEOUT)
     @operation_node(name='战斗超时')
     def battle_timeout(self) -> OperationRoundResult:
+        """
+        战斗超时。
+        :return: 操作结果
+        """
         auto_battle_utils.stop_running(self.auto_op)
         op = ExitInBattle(self.ctx, '战斗-挑战结果-失败', '按钮-退出')
         return self.round_by_op_result(op.execute())
@@ -202,18 +270,32 @@ class ExpertChallenge(ZOperation):
     @node_from(from_name='战斗超时')
     @operation_node(name='点击挑战结果退出')
     def click_result_exit(self) -> OperationRoundResult:
+        """
+        点击挑战结果退出。
+        :return: 操作结果
+        """
         return self.round_by_find_and_click_area(screen_name='战斗-挑战结果-失败', area_name='按钮-退出',
                                                  until_not_find_all=[('战斗-挑战结果-失败', '按钮-退出')],
                                                  success_wait=1, retry_wait=1)
 
     def handle_pause(self):
+        """
+        处理暂停。
+        """
         if self.auto_op is not None:
             self.auto_op.stop_running()
 
     def handle_resume(self):
+        """
+        处理恢复。
+        """
         auto_battle_utils.resume_running(self.auto_op)
 
     def after_operation_done(self, result: OperationResult):
+        """
+        操作完成后。
+        :param result: 操作结果
+        """
         ZOperation.after_operation_done(self, result)
         if self.auto_op is not None:
             self.auto_op.dispose()

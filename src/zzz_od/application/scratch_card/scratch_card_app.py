@@ -14,6 +14,8 @@ from zzz_od.operation.wait_normal_world import WaitNormalWorld
 
 class ScratchCardApp(ZApplication):
 
+    """刮刮卡:每日签到刮刮卡玩法(与卦象集录/吼吼饼铺共享每日一次,三选一)。无消耗。"""
+
     def __init__(self, ctx: ZContext):
         ZApplication.__init__(
             self,
@@ -49,12 +51,11 @@ class ScratchCardApp(ZApplication):
         :return:
         """
         self.ctx.controller.move_w(press=True, press_time=1, release=True)
-        time.sleep(1)
 
+        time.sleep(1) # 防止交互无效 issue #2405 #2395 #2328
         self.ctx.controller.interact(press=True, press_time=0.2, release=True)
-        time.sleep(3)
 
-        return self.round_success()
+        return self.round_success(wait=3)
 
     @node_from(from_name='等待加载', status='刮刮卡')
     @node_from(from_name='移动交互')
@@ -102,7 +103,7 @@ class ScratchCardApp(ZApplication):
             return self.round_retry(status=result.status, wait=1)
 
         areas = [
-            self.ctx.screen_loader.get_area('报刊亭', '刮层-%d' % i)
+            self.ctx.screen_loader.get_area('报刊亭', f'刮层-{i}')
             for i in range(1, 4)
         ]
 
@@ -125,7 +126,7 @@ class ScratchCardApp(ZApplication):
 
 def __debug():
     ctx = ZContext()
-    ctx.init_by_config()
+    ctx.init()
     app = ScratchCardApp(ctx)
     app.execute()
 

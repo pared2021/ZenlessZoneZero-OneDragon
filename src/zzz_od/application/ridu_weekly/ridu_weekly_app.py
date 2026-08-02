@@ -12,6 +12,8 @@ from zzz_od.operation.back_to_normal_world import BackToNormalWorld
 
 class RiduWeeklyApp(ZApplication):
 
+    """丽都周纪:领取周纪的积分/奖励。周限、无体力消耗。"""
+
     def __init__(self, ctx: ZContext):
         ZApplication.__init__(
             self,
@@ -50,9 +52,9 @@ class RiduWeeklyApp(ZApplication):
                                                  color_range=[(250, 250, 250), (255, 255, 255)])
 
             if result.is_success:
-                return self.round_wait(result.status, wait=1)
+                return self.round_wait(result.status, wait=0.5)
 
-        return self.round_retry(result.status, wait=1)
+        return self.round_retry(result.status, wait=0.5)
 
     @node_from(from_name='领取积分', success=False)  # 没有100积分之后
     @node_notify(when=NotifyTiming.CURRENT_DONE)

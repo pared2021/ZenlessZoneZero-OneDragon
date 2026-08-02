@@ -1,6 +1,7 @@
 import ctypes
 import importlib
 import sys
+from pathlib import Path
 
 from one_dragon.launcher.exe_launcher import ExeLauncher
 
@@ -19,34 +20,82 @@ class RuntimeLauncher(ExeLauncher):
         """同步代码：首次运行时克隆，后续运行时自动更新"""
         pre_modules = set(sys.modules)
 
-        from one_dragon.envs.env_config import EnvConfig
-        from one_dragon.envs.git_service import GitService
-        from one_dragon.envs.project_config import ProjectConfig
+        from one_dragon.base.operation.one_dragon_env_context import OneDragonEnvContext
+        from one_dragon.envs.git_service import GitSyncStatus
         from one_dragon.utils.i18_utils import gt
         from one_dragon.utils.log_utils import log
+        from one_dragon.version import __version__
+        log.info(f"OneDragon 集成启动器 {__version__}")
 
-        env_config = EnvConfig()
-        git_service = GitService(ProjectConfig(), env_config)
-        first_run = not git_service.check_repo_exists()
+        env_context = OneDragonEnvContext()
+        env_config = env_context.env_config
+        git_service = env_context.git_service
+        first_run = git_service.is_initial_checkout_pending()
 
         if not first_run and not env_config.auto_update_code:
             log.info(gt('未开启代码自动更新，跳过'))
             return
 
-        log.info(gt('首次运行，正在同步代码仓库...') if first_run else gt('正在检查代码更新...'))
-        success, msg = git_service.fetch_latest_code()
+        last_progress_printed = False
 
-        if success:
-            log.info(gt('代码同步完成') if first_run else gt('代码已是最新'))
-            # 清除同步过程中加载的模块，避免主程序使用旧版本
-            for name in set(sys.modules) - pre_modules:
-                del sys.modules[name]
+        def log_progress(_progress: float, message: str) -> None:
+            nonlocal last_progress_printed
+            refresh = '%' in message and 'done' not in message.lower()
+            if refresh:
+                print(message, end='\r', flush=True)
+                last_progress_printed = True
+                return
+
+            if last_progress_printed:
+                print(' ' * 120, end='\r', flush=True)
+                last_progress_printed = False
+
+            log.info(message)
+
+        log.info(gt('首次运行，正在同步代码仓库...') if first_run else gt('正在检查代码更新...'))
+        initial_tag = __version__ if first_run and __version__.startswith('v') and __version__ != 'v0.0.0' else None
+        status, message = git_service.fetch_latest_code(log_progress, initial_tag=initial_tag)
+
+        if status is GitSyncStatus.SUCCESS:
+            log.info(message)
+            # 清除同步过程中加载的源码模块，避免主程序使用旧版本
+            self._clear_src_modules(pre_modules)
             importlib.invalidate_caches()
-        elif first_run:
-            log.info(f"{gt('代码同步失败')}: {msg}")
+        elif status is GitSyncStatus.UP_TO_DATE:
+            log.info(message)
+        elif status is GitSyncStatus.RUNTIME_INCOMPATIBLE:
+            log.warning(f'{message}, {gt("继续使用当前版本")}')
+        elif status is GitSyncStatus.BUILTIN_TAG_UNAVAILABLE:
+            log.warning(f'{message}, {gt("继续使用内置版本")}')
+        elif status is GitSyncStatus.REMOTE_UNAVAILABLE:
+            if first_run:
+                log.error(f'{message}, {gt("请稍后重试或切换代码源")}')
+                sys.exit(1)
+                return
+            log.warning(f'{message}, {gt("继续使用当前版本")}')
+        elif status is GitSyncStatus.LOCAL_CHANGES:
+            log.warning(f'{message}, {gt("继续使用当前版本")}')
+        elif status is GitSyncStatus.LOCAL_UPDATE_FAILED:
+            log.error(f'{message}, {gt("请重新运行启动器；仍然失败时请重新安装")}')
             sys.exit(1)
         else:
-            log.info(f"{gt('代码更新失败')}: {msg}")
+            log.error(f'{message}, {gt("请查看日志后重试")}')
+            sys.exit(1)
+
+    @staticmethod
+    def _clear_src_modules(pre_modules: set[str]) -> None:
+        """清除同步期间加载的源码模块，不清除运行时和第三方模块。"""
+        src_dir = (Path(sys.executable).parent / 'src').resolve()
+        if not src_dir.is_dir():
+            return
+
+        for name in set(sys.modules) - pre_modules:
+            module = sys.modules.get(name)
+            module_file = getattr(module, '__file__', None)
+            if module_file is None or not Path(module_file).resolve().is_relative_to(src_dir):
+                continue
+
+            del sys.modules[name]
 
     @staticmethod
     def _hide_console() -> None:
